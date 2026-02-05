@@ -1,28 +1,14 @@
-name: Run Selenium Bot 4 Times Daily
+name: Schedule Test
 
 on:
   schedule:
-    - cron: '0/5 *  * * *'
+    - cron: '*/5 * * * *'
   workflow_dispatch:
 
-concurrency:
-  group: selenium-bot-lock
-  cancel-in-progress: true
-
 jobs:
-  run-bot:
+  test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
       - run: |
-          pip install --upgrade pip
-          pip install selenium webdriver-manager firebase-admin
-
-      - name: Run Bot
-        env:
-          FIREBASE_KEY_JSON: ${{ secrets.FIREBASE_KEY_JSON }}
-        run: python bot.py
+          echo "SCHEDULE TRIGGERED"
+          date
