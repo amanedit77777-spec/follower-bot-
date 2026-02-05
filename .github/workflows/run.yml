@@ -2,7 +2,7 @@ name: Run Selenium Bot 4 Times Daily
 
 on:
   schedule:
-    - cron: '30 11,12,13,14 * * *'
+    - cron: '*/1 * * * *'
   workflow_dispatch:
 
 # 🔐 PARALLEL RUN BLOCK
