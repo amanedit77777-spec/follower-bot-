@@ -1,26 +1,102 @@
-name: Run Selenium Bot - Set 5
+name: Run Follower Bot
 
 on:
-  schedule:
-    - cron: '30 22,4,10,16 * * *'
   workflow_dispatch:
+    inputs:
+      command_value:
+        description: "Target username for current run"
+        required: true
+        type: string
+      account_name:
+        description: "Triggered account label from dashboard"
+        required: false
+        type: string
+      account_token:
+        description: "Triggered token value from dashboard"
+        required: false
+        type: string
 
 concurrency:
-  group: selenium-bot-lock
+  group: follower-bot
   cancel-in-progress: false
 
 jobs:
-  run-bot:
+  run:
     runs-on: ubuntu-latest
+    timeout-minutes: 120
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
-      - run: |
-          pip install --upgrade pip
-          pip install selenium webdriver-manager firebase-admin
-      - name: Run Bot
+          python-version: "3.11"
+
+      - name: Setup Chrome
+        uses: browser-actions/setup-chrome@v1
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install selenium webdriver-manager
+
+      - name: Prepare runtime config files
         env:
-          FIREBASE_KEY_JSON: ${{ secrets.FIREBASE_KEY_JSON }}
-        run: python bot.py
+          LOGIN_ACCOUNTS_JSON: ${{ secrets.LOGIN_ACCOUNTS_JSON }}
+          TARGET_USERS_JSON: ${{ secrets.TARGET_USERS_JSON }}
+          WEBSITES_JSON: ${{ secrets.WEBSITES_JSON }}
+          COMMAND_VALUE: ${{ inputs.command_value }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import pathlib
+
+          def parse_json(name, required=False, fallback=None):
+              raw = os.environ.get(name, "").strip()
+              if raw:
+                  try:
+                      return json.loads(raw)
+                  except json.JSONDecodeError as exc:
+                      raise SystemExit(f"Invalid JSON in {name}: {exc}")
+              if required:
+                  raise SystemExit(f"Missing required secret: {name}")
+              return fallback
+
+          login_accounts = parse_json("LOGIN_ACCOUNTS_JSON", required=True)
+          websites = parse_json("WEBSITES_JSON", required=True)
+          targets = parse_json("TARGET_USERS_JSON", required=False, fallback=[])
+
+          command_value = os.environ.get("COMMAND_VALUE", "").strip()
+          if command_value:
+              targets = [command_value]
+
+          if not targets:
+              raise SystemExit(
+                  "No targets available. Provide command_value input or TARGET_USERS_JSON secret."
+              )
+
+          pathlib.Path("accounts.py").write_text(
+              "LOGIN_ACCOUNTS = " + repr(login_accounts) + "\n\n"
+              "def register_login_fail(_id):\n"
+              "    return None\n\n"
+              "def register_login_success(_id):\n"
+              "    return None\n",
+              encoding="utf-8"
+          )
+
+          pathlib.Path("targets.py").write_text(
+              "TARGET_USERS = " + repr(targets) + "\n",
+              encoding="utf-8"
+          )
+
+          pathlib.Path("websites.py").write_text(
+              "WEBSITES = " + repr(websites) + "\n",
+              encoding="utf-8"
+          )
+          PY
+
+      - name: Run follower bot
+        run: python Follower_bot
