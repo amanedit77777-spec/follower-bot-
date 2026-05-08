@@ -126,10 +126,10 @@ def has_zero_credit():
             return True
 
         credit = int(re.sub(r"\D", "", credit_text))
-        log(f"Current Credit: {credit}")
+        log(f"💰 Current Credit: {credit}")
         return credit <= 0
     except Exception:
-        log("Credit element not found. Assuming 0 to skip.")
+        log("⚠️ Credit element not found. Assuming 0 to skip.")
         return True
 
 
@@ -177,7 +177,7 @@ def _find_login_button():
 def _click_login_button(login_button, pass_input):
     try:
         login_button.click()
-        log("Login click method: selenium.click()")
+        log("🖱️ Login click method: selenium.click()")
         return True
     except Exception:
         pass
@@ -193,14 +193,14 @@ def _click_login_button(login_button, pass_input):
             """,
             login_button,
         )
-        log("Login click method: JavaScript click")
+        log("🧠 Login click method: JavaScript click")
         return True
     except Exception:
         pass
 
     try:
         pass_input.send_keys(Keys.ENTER)
-        log("Login click method: ENTER key submit")
+        log("⌨️ Login click method: ENTER key submit")
         return True
     except Exception:
         return False
@@ -236,18 +236,18 @@ def login_with_account(account):
             raise RuntimeError("Could not click login button")
 
         if wait_for_login_result():
-            log(f"LOGIN SUCCESS: {account['user']}")
+            log(f"✅ LOGIN SUCCESS: {account['user']}")
             if "_id" in account:
                 register_login_success(account["_id"])
             return True
 
-        log(f"LOGIN FAILED: {account['user']}")
+        log(f"❌ LOGIN FAILED: {account['user']}")
         if "_id" in account:
             register_login_fail(account["_id"])
         return False
 
     except Exception as error:
-        log(f"Login Error: {error}")
+        log(f"🛑 Login Error: {error}")
         if "_id" in account:
             register_login_fail(account["_id"])
         return False
@@ -260,11 +260,11 @@ def send_followers_single_target(root, target):
         return False
 
     if not is_login_really_success():
-        log("Session expired. Login required again.")
+        log("🔐 Session expired. Login required again.")
         return "LOGIN_REQUIRED"
 
     if has_zero_credit():
-        log("Credit is 0.")
+        log("🚫 Credit is 0.")
         return "NO_CREDIT"
 
     try:
@@ -288,49 +288,52 @@ def send_followers_single_target(root, target):
         driver.execute_script("arguments[0].click();", start_button)
         time.sleep(1)
 
-        log(f"Sent Request -> {target}")
+        log(f"⚡ Sent Request -> {target}")
         return True
 
     except Exception as error:
-        log(f"Failed to send to {target}: {error}")
+        log(f"⚠️ Failed to send to {target}: {error}")
         return False
 
 
-def process_site_until_no_credit(account, site, target_counter):
+def process_site_until_no_credit(account, site, target_counter, is_final_retry=False):
     root = get_root(site["login_url"])
     relogin_attempts = 0
     consecutive_failures = 0
 
     log("")
-    log(f"Site: {site['name']}")
+    if is_final_retry:
+        log(f"🌍 Site: {site['name']} (Final Login Retry)")
+    else:
+        log(f"🌍 Site: {site['name']}")
     open_page(site["login_url"])
 
     if not login_with_account(account):
-        log(f"Skipping {site['name']} because login failed.")
-        return target_counter
+        log(f"⏭️ Skipping {site['name']} because login failed.")
+        return target_counter, "LOGIN_FAILED"
 
     while True:
         current_target = TARGET_USERS[target_counter % len(TARGET_USERS)]
-        log(f"Target: {current_target}")
+        log(f"🎯 Target: {current_target}")
 
         result = send_followers_single_target(root, current_target)
 
         if result == "NO_CREDIT":
-            log(f"{site['name']} credit finished. Moving to next site.")
-            return target_counter
+            log(f"🏁 {site['name']} credit finished. Moving to next site.")
+            return target_counter, "DONE"
 
         if result == "LOGIN_REQUIRED":
             if relogin_attempts >= MAX_RELOGIN_ATTEMPTS_PER_SITE:
-                log(f"{site['name']} session could not recover. Moving to next site.")
-                return target_counter
+                log(f"🛑 {site['name']} session could not recover. Moving to next site.")
+                return target_counter, "LOGIN_FAILED"
 
             relogin_attempts += 1
-            log(f"Re-login attempt {relogin_attempts} on {site['name']}...")
+            log(f"🔁 Re-login attempt {relogin_attempts} on {site['name']}...")
             open_page(site["login_url"])
 
             if not login_with_account(account):
-                log(f"Re-login failed on {site['name']}. Moving to next site.")
-                return target_counter
+                log(f"❌ Re-login failed on {site['name']}. Moving to next site.")
+                return target_counter, "LOGIN_FAILED"
 
             continue
 
@@ -340,30 +343,30 @@ def process_site_until_no_credit(account, site, target_counter):
             relogin_attempts = 0
 
             delay = random.uniform(*TARGET_DELAY_RANGE)
-            log(f"Waiting {delay:.1f}s...")
+            log(f"⏳ Waiting {delay:.1f}s...")
             time.sleep(delay)
             continue
 
         consecutive_failures += 1
 
         if consecutive_failures < MAX_TARGET_RETRIES:
-            log(f"Retry same target: {current_target}")
+            log(f"🔁 Retry same target: {current_target}")
             time.sleep(RETRY_DELAY_SECONDS)
             continue
 
         if relogin_attempts >= MAX_RELOGIN_ATTEMPTS_PER_SITE:
-            log(f"{site['name']} is failing repeatedly. Moving to next site.")
-            return target_counter
+            log(f"🚫 {site['name']} is failing repeatedly. Moving to next site.")
+            return target_counter, "DONE"
 
         relogin_attempts += 1
         consecutive_failures = 0
 
-        log(f"Refreshing {site['name']} and trying again...")
+        log(f"🔄 Refreshing {site['name']} and trying again...")
         open_page(site["login_url"])
 
         if not login_with_account(account):
-            log(f"Re-login failed on {site['name']}. Moving to next site.")
-            return target_counter
+            log(f"❌ Re-login failed on {site['name']}. Moving to next site.")
+            return target_counter, "LOGIN_FAILED"
 
         time.sleep(RETRY_DELAY_SECONDS)
 
@@ -373,23 +376,43 @@ if __name__ == "__main__":
         for account in LOGIN_ACCOUNTS:
             log("")
             log("==========================================")
-            log(f"LOGGING IN ACCOUNT: {account['user']}")
+            log(f"👤 LOGGING IN ACCOUNT: {account['user']}")
             log("==========================================")
 
             target_counter = 0
+            failed_login_sites = []
+            failed_login_site_names = set()
 
             for site in WEBSITES:
-                target_counter = process_site_until_no_credit(
+                target_counter, status = process_site_until_no_credit(
                     account,
                     site,
                     target_counter,
                 )
+                if status == "LOGIN_FAILED" and site["name"] not in failed_login_site_names:
+                    failed_login_sites.append(site)
+                    failed_login_site_names.add(site["name"])
+
+            if failed_login_sites:
+                log("")
+                log("🔁 Retrying login for failed websites at the end...")
+                for failed_site in failed_login_sites:
+                    target_counter, retry_status = process_site_until_no_credit(
+                        account,
+                        failed_site,
+                        target_counter,
+                        is_final_retry=True,
+                    )
+                    if retry_status == "LOGIN_FAILED":
+                        log(f"🛑 Final retry login failed for {failed_site['name']}.")
+                    else:
+                        log(f"✅ Final retry completed for {failed_site['name']}.")
 
             log("")
-            log(f"Finished all websites for {account['user']}")
+            log(f"✅ Finished all websites for {account['user']}")
 
     except KeyboardInterrupt:
-        log("Script stopped by user.")
+        log("🛑 Script stopped by user.")
     finally:
-        log("Exiting...")
+        log("👋 Exiting...")
         driver.quit()
